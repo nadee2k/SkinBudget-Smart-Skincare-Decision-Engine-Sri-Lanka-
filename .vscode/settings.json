@@ -1,0 +1,6 @@
+{
+    "git.showPushSuccessNotification": true,
+    "terminal.integrated.commandsToSkipShell": [
+        ""
+    ]
+}

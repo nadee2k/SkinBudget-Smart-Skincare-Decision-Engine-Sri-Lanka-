@@ -48,3 +48,4 @@ Collect:
 
     from local e-commerce
     store as numeric value
+
