@@ -4,6 +4,40 @@ from .config import get_settings
 from .database import db
 
 
+def _select_best_routine(df: pd.DataFrame, budget: float) -> List[dict]:
+    """
+    Select the best product routine within the given budget.
+    Uses a greedy approach: for each category (by step_order),
+    pick the highest-scoring product that fits within remaining budget.
+    """
+    result = []
+    remaining_budget = budget
+    
+    # Sort by step_order to maintain routine sequence
+    df_sorted = df.sort_values('step_order')
+    
+    for category in df_sorted['category'].unique():
+        # Get products in this category, sorted by final_score descending
+        category_products = df_sorted[df_sorted['category'] == category].sort_values('final_score', ascending=False)
+        
+        # Pick the first product that fits the budget
+        for _, row in category_products.iterrows():
+            if row['price'] <= remaining_budget:
+                remaining_budget -= row['price']
+                result.append({
+                    "product_id": row['product_id'],
+                    "name": row['name'],
+                    "brand": row['brand'],
+                    "category": row['category'],
+                    "price": float(row['price']),
+                    "score": round(float(row['final_score']), 2),
+                    "reasoning": "Contains effective ingredients for your chosen concerns." if row['concern_score'] > 0 else "Good match for your skin type."
+                })
+                break
+    
+    return result
+
+
 async def run_recommendation(skin_type_id: str, concern_ids: List[str], budget: float):
     settings = get_settings()
     # 1. Fetch raw data

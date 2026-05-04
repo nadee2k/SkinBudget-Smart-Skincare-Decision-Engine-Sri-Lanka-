@@ -74,7 +74,8 @@ async def get_meta():
             "concerns": [dict(c) for c in concerns]
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to load metadata")
+        raise HTTPException(status_code=500, detail="Unable to load metadata")
 
 
 
@@ -196,10 +197,35 @@ async def recommend_by_user(req: UserRecommendRequest):
 @app.post("/api/recommend", response_model=list[ProductRecommendation])
 async def recommend(req: RecommendRequest):
     try:
+        # Validate skin type exists
+        skin_type_results = await db.fetch(
+            "SELECT 1 FROM skin_type WHERE skin_type_id = $1",
+            req.skin_type_id
+        )
+        if not skin_type_results:
+            raise HTTPException(status_code=400, detail="Unknown skin type")
+        
+        # Validate all concern IDs exist
+        concern_results = await db.fetch(
+            "SELECT DISTINCT concern_id FROM skin_concern WHERE concern_id = ANY($1)",
+            req.concern_ids
+        )
+        found_concerns = {row['concern_id'] for row in concern_results}
+        unknown = set(req.concern_ids) - found_concerns
+        if unknown:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown concern IDs: {', '.join(sorted(unknown))}"
+            )
+        
+        # Run recommendation engine
         res = await run_recommendation(req.skin_type_id, req.concern_ids, req.budget)
         return res
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Recommendation failed")
+        raise HTTPException(status_code=500, detail="Recommendation failed")
 
 # Ensure static folder exists for mount
 os.makedirs("static", exist_ok=True)
