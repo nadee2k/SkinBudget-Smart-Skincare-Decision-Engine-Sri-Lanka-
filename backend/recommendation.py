@@ -1,9 +1,11 @@
 import pandas as pd
 from typing import List
+from .config import get_settings
 from .database import db
 
 
 async def run_recommendation(skin_type_id: str, concern_ids: List[str], budget: float):
+    settings = get_settings()
     # 1. Fetch raw data
     query_products = """
         SELECT p.product_id, p.name, p.price, b.name as brand, rc.category_name as category, rc.step_order,
@@ -83,10 +85,10 @@ async def run_recommendation(skin_type_id: str, concern_ids: List[str], budget: 
     df_p['popularity_score_n'] = normalize(df_p['popularity_score'])
     
     df_p['final_score'] = (
-        df_p['concern_score_n'] * 0.4 +
-        df_p['skin_score_n'] * 0.2 +
-        df_p['rating_n'] * 0.2 +
-        df_p['popularity_score_n'] * 0.2
+        df_p['concern_score_n'] * settings.reco_concern_weight +
+        df_p['skin_score_n'] * settings.reco_skin_weight +
+        df_p['rating_n'] * settings.reco_rating_weight +
+        df_p['popularity_score_n'] * settings.reco_popularity_weight
     )
     
     # Conflicts Penalty
