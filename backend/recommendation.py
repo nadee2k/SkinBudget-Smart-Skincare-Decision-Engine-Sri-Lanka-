@@ -4,50 +4,37 @@ from .config import get_settings
 from .database import db
 
 
-def _select_best_routine(df: pd.DataFrame, budget: float):
+def _select_best_routine(df: pd.DataFrame, budget: float) -> List[dict]:
     """
-    Select the best combination of products within budget.
-    Picks the highest-scoring product per category that fits within budget.
+    Select the best product routine within the given budget.
+    Uses a greedy approach: for each category (by step_order),
+    pick the highest-scoring product that fits within remaining budget.
     """
     result = []
-    total_spent = 0.0
+    remaining_budget = budget
     
-    # Sort by final_score descending, then by step_order
-    df_sorted = df.sort_values(by=['final_score'], ascending=False)
+    # Sort by step_order to maintain routine sequence
+    df_sorted = df.sort_values('step_order')
     
-    # Track selected categories to pick one product per category
-    selected_categories = set()
-    
-    for _, row in df_sorted.iterrows():
-        category = row['category']
+    for category in df_sorted['category'].unique():
+        # Get products in this category, sorted by final_score descending
+        category_products = df_sorted[df_sorted['category'] == category].sort_values('final_score', ascending=False)
         
-        # Skip if we already have a product from this category
-        if category in selected_categories:
-            continue
-        
-        price = float(row['price'])
-        
-        # Check if adding this product exceeds budget
-        if total_spent + price <= budget:
-            total_spent += price
-            selected_categories.add(category)
-            
-            reasoning = "Good match for your skin type."
-            if row['concern_score'] > 0:
-                reasoning = "Contains effective ingredients for your chosen concerns."
-            
-            result.append({
-                "product_id": row['product_id'],
-                "name": row['name'],
-                "brand": row['brand'],
-                "category": row['category'],
-                "price": price,
-                "score": round(float(row['final_score']), 2),
-                "reasoning": reasoning
-            })
+        # Pick the first product that fits the budget
+        for _, row in category_products.iterrows():
+            if row['price'] <= remaining_budget:
+                remaining_budget -= row['price']
+                result.append({
+                    "product_id": row['product_id'],
+                    "name": row['name'],
+                    "brand": row['brand'],
+                    "category": row['category'],
+                    "price": float(row['price']),
+                    "score": round(float(row['final_score']), 2),
+                    "reasoning": "Contains effective ingredients for your chosen concerns." if row['concern_score'] > 0 else "Good match for your skin type."
+                })
+                break
     
-    # Sort by step_order
-    result.sort(key=lambda x: df[df['product_id'] == x['product_id']]['step_order'].values[0])
     return result
 
 
@@ -159,6 +146,26 @@ async def run_recommendation(skin_type_id: str, concern_ids: List[str], budget: 
     df_p = df_p.sort_values(by='final_score', ascending=False)
     
     # Prepare result picking best from each category step
-    result = _select_best_routine(df_p, budget)
+    # Realism approach: Return a routine
+    # Group by category and pick top
     
+    result = []
+    # Drop duplicates by category, keeping largest score
+    best_routine = df_p.drop_duplicates(subset=['category'], keep='first').sort_values('step_order')
+    
+    for _, row in best_routine.iterrows():
+        reasoning = f"Good match for your skin type."
+        if row['concern_score'] > 0:
+            reasoning = "Contains effective ingredients for your chosen concerns."
+            
+        result.append({
+            "product_id": row['product_id'],
+            "name": row['name'],
+            "brand": row['brand'],
+            "category": row['category'],
+            "price": float(row['price']),
+            "score": round(float(row['final_score']), 2),
+            "reasoning": reasoning
+        })
+        
     return result

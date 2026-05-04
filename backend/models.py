@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class RecommendRequest(BaseModel):
@@ -8,10 +8,21 @@ class RecommendRequest(BaseModel):
     concern_ids: List[str] = Field(..., min_length=1)
     budget: float = Field(..., gt=0)
 
-    @model_validator(mode="after")
-    def ensure_unique_concerns(self):
-        self.concern_ids = list(dict.fromkeys(self.concern_ids))
-        return self
+    @field_validator('skin_type_id')
+    @classmethod
+    def normalize_skin_type(cls, v):
+        # Strip whitespace
+        v = v.strip()
+        if not v:
+            raise ValueError('skin_type_id cannot be blank')
+        return v
+
+    @field_validator('concern_ids')
+    @classmethod
+    def normalize_concerns(cls, v):
+        # Trim each concern and remove duplicates while preserving order
+        trimmed = [concern.strip() for concern in v]
+        return list(dict.fromkeys(trimmed))
 
 
 class ProductRecommendation(BaseModel):
