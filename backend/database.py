@@ -33,6 +33,18 @@ class Database:
         async with self.pool.acquire() as connection:
             return await connection.fetch(query, *args)
 
+    async def execute(self, query: str, *args):
+        if not self.pool:
+            raise Exception("Database not connected")
+        async with self.pool.acquire() as connection:
+            return await connection.execute(query, *args)
+
+    async def fetchrow(self, query: str, *args):
+        if not self.pool:
+            raise Exception("Database not connected")
+        async with self.pool.acquire() as connection:
+            return await connection.fetchrow(query, *args)
+
     async def health_check(self):
         if not self.pool:
             raise Exception("Database not connected")
