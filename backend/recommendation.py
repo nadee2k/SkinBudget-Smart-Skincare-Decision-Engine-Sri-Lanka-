@@ -4,6 +4,53 @@ from .config import get_settings
 from .database import db
 
 
+def _select_best_routine(df: pd.DataFrame, budget: float):
+    """
+    Select the best combination of products within budget.
+    Picks the highest-scoring product per category that fits within budget.
+    """
+    result = []
+    total_spent = 0.0
+    
+    # Sort by final_score descending, then by step_order
+    df_sorted = df.sort_values(by=['final_score'], ascending=False)
+    
+    # Track selected categories to pick one product per category
+    selected_categories = set()
+    
+    for _, row in df_sorted.iterrows():
+        category = row['category']
+        
+        # Skip if we already have a product from this category
+        if category in selected_categories:
+            continue
+        
+        price = float(row['price'])
+        
+        # Check if adding this product exceeds budget
+        if total_spent + price <= budget:
+            total_spent += price
+            selected_categories.add(category)
+            
+            reasoning = "Good match for your skin type."
+            if row['concern_score'] > 0:
+                reasoning = "Contains effective ingredients for your chosen concerns."
+            
+            result.append({
+                "product_id": row['product_id'],
+                "name": row['name'],
+                "brand": row['brand'],
+                "category": row['category'],
+                "price": price,
+                "score": round(float(row['final_score']), 2),
+                "reasoning": reasoning
+            })
+    
+    # Sort by step_order
+    result.sort(key=lambda x: df[df['product_id'] == x['product_id']]['step_order'].values[0])
+    return result
+
+
 async def run_recommendation(skin_type_id: str, concern_ids: List[str], budget: float):
     settings = get_settings()
     # 1. Fetch raw data
@@ -112,26 +159,6 @@ async def run_recommendation(skin_type_id: str, concern_ids: List[str], budget: 
     df_p = df_p.sort_values(by='final_score', ascending=False)
     
     # Prepare result picking best from each category step
-    # Realism approach: Return a routine
-    # Group by category and pick top
+    result = _select_best_routine(df_p, budget)
     
-    result = []
-    # Drop duplicates by category, keeping largest score
-    best_routine = df_p.drop_duplicates(subset=['category'], keep='first').sort_values('step_order')
-    
-    for _, row in best_routine.iterrows():
-        reasoning = f"Good match for your skin type."
-        if row['concern_score'] > 0:
-            reasoning = "Contains effective ingredients for your chosen concerns."
-            
-        result.append({
-            "product_id": row['product_id'],
-            "name": row['name'],
-            "brand": row['brand'],
-            "category": row['category'],
-            "price": float(row['price']),
-            "score": round(float(row['final_score']), 2),
-            "reasoning": reasoning
-        })
-        
     return result
